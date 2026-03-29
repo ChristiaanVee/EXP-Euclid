@@ -1,21 +1,33 @@
 import './style.css'
 import p5 from 'p5'
+import GUI from 'lil-gui'
 
 new p5((s: p5) => {
-  const DOT_RADIUS = 4
+  const DOT_RADIUS = 2
   const HANDLE_RADIUS = 14
 
   interface Point { x: number; y: number }
 
+  const params = { points: 3, chaos: 0, seed: 1 }
   let pts: Point[]
   let dragging = -1
 
-  function randomPts(): Point[] {
+  // Mulberry32 — compact seeded PRNG, returns values in [0, 1)
+  function mulberry32(seed: number) {
+    return () => {
+      seed |= 0; seed = seed + 0x6D2B79F5 | 0
+      let t = Math.imul(seed ^ seed >>> 15, 1 | seed)
+      t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t
+      return ((t ^ t >>> 14) >>> 0) / 4294967296
+    }
+  }
+
+  function randomPt(): Point {
     const margin = 100
-    return [0, 1, 2].map(() => ({
+    return {
       x: margin + Math.random() * (s.width - margin * 2),
       y: margin + Math.random() * (s.height - margin * 2),
-    }))
+    }
   }
 
   function circumcircle(a: Point, b: Point, c: Point): { x: number; y: number; r: number } | null {
@@ -30,9 +42,30 @@ new p5((s: p5) => {
     return { x: ux, y: uy, r }
   }
 
+  // Sliding window of consecutive triples, then Watts-Strogatz rewire:
+  // each point in a circle is independently replaced with a random point
+  // with probability = chaos. Same seed always yields the same rewiring.
+  function circleGroups(n: number): [number, number, number][] {
+    const rand = mulberry32(params.seed)
+    return Array.from({ length: n - 2 }, (_, i) => {
+      const triple: [number, number, number] = [i, i + 1, i + 2]
+      return triple.map(idx =>
+        rand() < params.chaos ? Math.floor(rand() * n) : idx
+      ) as [number, number, number]
+    })
+  }
+
   s.setup = () => {
     s.createCanvas(s.windowWidth, s.windowHeight)
-    pts = randomPts()
+    pts = Array.from({ length: params.points }, randomPt)
+
+    const gui = new GUI()
+    gui.add(params, 'points', 3, 36, 1).name('Amount of points').onChange((n: number) => {
+      while (pts.length < n) pts.push(randomPt())
+      pts.length = n
+    })
+    gui.add(params, 'chaos', 0, 1, 0.01).name('Chaos')
+    gui.add(params, 'seed', 1, 999, 1).name('Seed')
   }
 
   s.draw = () => {
@@ -41,18 +74,32 @@ new p5((s: p5) => {
     s.stroke(255)
     s.strokeWeight(1)
 
-    const cc = circumcircle(pts[0], pts[1], pts[2])
-    if (cc) s.ellipse(cc.x, cc.y, cc.r * 2, cc.r * 2)
+    const groups = circleGroups(pts.length)
 
-    for (const p of pts) {
-      // Solid dot
+    for (const [i, j, k] of groups) {
+      const cc = circumcircle(pts[i], pts[j], pts[k])
+      if (cc) s.ellipse(cc.x, cc.y, cc.r * 2, cc.r * 2)
+    }
+
+    const count = new Array(pts.length).fill(0)
+    for (const group of groups) for (const idx of group) count[idx]++
+    const sharedCount = count.filter(c => c > 1).length
+
+    s.fill(255)
+    s.noStroke()
+    s.textSize(12)
+    s.text(`shared points: ${sharedCount}`, 12, 20)
+
+    for (let i = 0; i < pts.length; i++) {
+      const p = pts[i]
+      const shared = count[i] > 1
+
       s.fill(255)
       s.noStroke()
       s.ellipse(p.x, p.y, DOT_RADIUS * 2, DOT_RADIUS * 2)
 
-      // Outlined handle
       s.noFill()
-      s.stroke(255)
+      if (shared) s.stroke(220, 50, 50); else s.stroke(255)
       s.strokeWeight(1)
       s.ellipse(p.x, p.y, HANDLE_RADIUS * 2, HANDLE_RADIUS * 2)
     }
