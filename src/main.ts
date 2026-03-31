@@ -73,9 +73,7 @@ new p5((s: p5) => {
     if (k >= params.numberOfOrbits || k >= pts.length) return
     const cfg = orbitConfigs[k]
     orbitCenters[k] = centerIndexForSatellite(k, cfg.pickIndex)
-    const o = radiusAndAngleFromSatellite(k, orbitCenters[k])
-    cfg.radius = o.radius
-    orbitAngles[k] = o.angle
+    orbitAngles[k] = radiusAndAngleFromSatellite(k, orbitCenters[k]).angle
   }
 
   function initAllOrbits() {
@@ -93,7 +91,7 @@ new p5((s: p5) => {
       const cfg = orbitConfigs[i]
       const idx = i
       folder.add(cfg, 'speed', -0.05, 0.05, 0.001).name('Orbit Speed')
-      folder.add(cfg, 'radius', 10, 600, 1).name('Orbit Radius')
+      folder.add(cfg, 'radius', 10, 3000, 1).name('Orbit Radius')
       orbitPickCtrls[i] = folder.add(cfg, 'pickIndex', 0, maxOrbitIndex(), 1).name('Orbit index').onChange(() => {
         initOrbitK(idx)
       })
@@ -160,8 +158,13 @@ new p5((s: p5) => {
 
   function circleGroups(n: number): [number, number, number][] {
     const rand = mulberry32(params.seed)
+    const indices = Array.from({ length: n }, (_, i) => i)
+    for (let i = n - 1; i > 0; i--) {
+      const j = Math.floor(rand() * (i + 1));
+      [indices[i], indices[j]] = [indices[j], indices[i]]
+    }
     return Array.from({ length: n - 2 }, (_, i) => {
-      const triple: [number, number, number] = [i, i + 1, i + 2]
+      const triple: [number, number, number] = [indices[i], indices[i + 1], indices[i + 2]]
       return triple.map(idx =>
         rand() < params.chaos ? Math.floor(rand() * n) : idx
       ) as [number, number, number]
