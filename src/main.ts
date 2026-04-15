@@ -249,7 +249,20 @@ new p5((s: p5) => {
       const cc = circumcircle(pts[i], pts[j], pts[k])
       if (cc && cc.r >= 0.5) {
         const o = worldToScreen(cc.x, cc.y, pivot)
-        s.ellipse(o.x, o.y, cc.r * 2, cc.r * 2)
+        const maxR = Math.hypot(s.width, s.height) * 20
+        if (cc.r < maxR) {
+          s.ellipse(o.x, o.y, cc.r * 2, cc.r * 2)
+        } else {
+          // Radius too large to tessellate cleanly — draw the tangent line instead
+          const dx = s.width / 2 - o.x, dy = s.height / 2 - o.y
+          const dist = Math.hypot(dx, dy)
+          if (dist > 0) {
+            const nx = dx / dist, ny = dy / dist
+            const px = o.x + nx * cc.r, py = o.y + ny * cc.r
+            const len = Math.max(s.width, s.height)
+            s.line(px - ny * len, py + nx * len, px + ny * len, py - nx * len)
+          }
+        }
       }
     }
 
